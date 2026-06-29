@@ -1,0 +1,406 @@
+local Fluent = loadstring(game:HttpGet(
+    "https://github.com/StyearX/Fluent-Modded/releases/download/Fluent/FluentPro"
+))()
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+local camera = Workspace.CurrentCamera
+
+local Settings = {
+    SilentAim = false,
+    Aimbot = false,
+    AimbotSmoothness = 1,
+    TeamCheck = true,
+    VisibleCheck = true,
+    InfiniteJump = false,
+    
+    FOV = {
+        Enabled = false,
+        Radius = 100,
+        Color = Color3.fromRGB(0, 110, 255)
+    },
+
+    ESP = {
+        Enabled = false,
+        Chams = false,
+        Names = false,
+        Health = false,
+        TeamCheck = true
+    }
+}
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 60
+FOVCircle.Filled = false
+FOVCircle.Transparency = 1
+
+Fluent:RegisterCustomTheme("AbyssBlue", {
+    Accent = Color3.fromRGB(0, 110, 255),
+    AcrylicMain = Color3.fromRGB(2, 3, 8),
+    Background = Color3.fromRGB(2, 3, 8),
+    Text = Color3.fromRGB(240, 245, 255),
+    IconColor = Color3.fromRGB(0, 150, 255),
+    IconSize = 18,
+    ShineEnabled = true,
+    Shine = {
+        Speed = 0.25,
+        RotationSpeed = 12,
+        ColorSequence = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 15, 40)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 60, 140)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 15, 40))
+        })
+    },
+    StrokeShine = true,
+    StrokeDark = Color3.fromRGB(0, 30, 70)
+})
+
+local Window = Fluent:CreateWindow({
+    Title = "BlueBerry Hub",
+    SubTitle = "by KaIdo",
+    TabWidth = 120,
+    Size = UDim2.fromOffset(560, 460),
+    Acrylic = true,
+    Theme = "AbyssBlue",
+    MinimizeKey = Enum.KeyCode.LeftControl,
+    Search = true
+})
+
+local CombatTab = Window:AddTab({ Title = "Combat", Icon = "solar/crosshair-bold" })
+local VisualTab = Window:AddTab({ Title = "Visuals", Icon = "solar/eye-bold" })
+local TeleportTab = Window:AddTab({ Title = "Teleport", Icon = "solar/map-point-bold" })
+local MiscTab = Window:AddTab({ Title = "Misc", Icon = "solar/widget-bold" })
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "solar/settings-bold" })
+
+local function getdirection(origin, position)
+    return (position - origin).Unit
+end
+
+local function isvisible(targetpart)
+    local character = LocalPlayer.Character
+    if not character then return false end
+
+    local origin = camera.CFrame.Position
+    local direction = (targetpart.Position - origin)
+
+    local raycastparams = RaycastParams.new()
+    raycastparams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastparams.FilterDescendantsInstances = {character, camera}
+    raycastparams.IgnoreWater = true
+
+    local result = Workspace:Raycast(origin, direction, raycastparams)
+    if result then
+        return result.Instance:IsDescendantOf(targetpart.Parent)
+    end
+    return true
+end
+
+local function issameteam(player)
+    if not Settings.TeamCheck then return false end
+    if LocalPlayer.Team == nil or player.Team == nil then return false end
+    return LocalPlayer.Team == player.Team
+end
+
+local function getclosestplayer()
+    local closestpart = nil
+    local closestdistance = math.huge
+    local mousepos = UserInputService:GetMouseLocation()
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            if not issameteam(player) then
+                local humanoidrootpart = player.Character:FindFirstChild("HumanoidRootPart")
+                local humanoid = player.Character:FindFirstChild("Humanoid")
+
+                if humanoidrootpart and humanoid and humanoid.Health > 0 then
+                    local screenpos, onscreen = camera:WorldToViewportPoint(humanoidrootpart.Position)
+
+                    if onscreen then
+                        if Settings.VisibleCheck and not isvisible(humanoidrootpart) then continue end
+                        
+                        local distance = (Vector2.new(screenpos.X, screenpos.Y) - mousepos).Magnitude
+
+                        if Settings.FOV.Enabled and distance > Settings.FOV.Radius then continue end
+
+                        if distance < closestdistance then
+                            closestdistance = distance
+                            closestpart = humanoidrootpart
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closestpart
+end
+
+local closesthitpart = nil
+
+RunService.Heartbeat:Connect(function()
+    closesthitpart = (Settings.SilentAim or Settings.Aimbot) and getclosestplayer() or nil
+    
+    if Settings.FOV.Enabled then
+        FOVCircle.Visible = true
+        FOVCircle.Position = UserInputService:GetMouseLocation()
+        FOVCircle.Radius = Settings.FOV.Radius
+        FOVCircle.Color = Settings.FOV.Color
+    else
+        FOVCircle.Visible = false
+    end
+
+    if Settings.Aimbot and closesthitpart and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local screenpos, onscreen = camera:WorldToViewportPoint(closesthitpart.Position)
+        if onscreen then
+            local mousepos = UserInputService:GetMouseLocation()
+            local moveX = (screenpos.X - mousepos.X) / Settings.AimbotSmoothness
+            local moveY = (screenpos.Y - mousepos.Y) / Settings.AimbotSmoothness
+            mousemoverel(moveX, moveY)
+        end
+    end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if Settings.InfiniteJump then
+        local Character = LocalPlayer.Character
+        if Character and Character:FindFirstChildOfClass("Humanoid") then
+            Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+        end
+    end
+end)
+
+local oldnamecall
+oldnamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
+    local method, arguments = getnamecallmethod(), {...}
+    local self = arguments[1]
+
+    if self == Workspace and not checkcaller() and method == "Raycast" then
+        local hitpart = closesthitpart
+
+        if Settings.SilentAim and hitpart then
+            local origin = arguments[2]
+            local direction = getdirection(origin, hitpart.Position) * 1000
+            arguments[2], arguments[3] = origin, direction
+            return oldnamecall(unpack(arguments))
+        end
+    end
+    return oldnamecall(...)
+end))
+
+CombatTab:AddSection("Aim Settings")
+
+CombatTab:AddToggle("SilentAim", {
+    Title = "Silent Aim",
+    Default = false,
+    Callback = function(Value) Settings.SilentAim = Value end
+})
+
+CombatTab:AddToggle("Aimbot", {
+    Title = "Aimbot",
+    Default = false,
+    Callback = function(Value) Settings.Aimbot = Value end
+})
+
+CombatTab:AddSlider("Smoothness", {
+    Title = "Aimbot Smoothness",
+    Default = 2,
+    Min = 1,
+    Max = 10,
+    Rounding = 1,
+    Callback = function(Value) Settings.AimbotSmoothness = Value end
+})
+
+CombatTab:AddToggle("TeamCheck", {
+    Title = "Team Check",
+    Default = true,
+    Callback = function(Value) Settings.TeamCheck = Value end
+})
+
+CombatTab:AddToggle("VisibleCheck", {
+    Title = "Visibility Check",
+    Default = true,
+    Callback = function(Value) Settings.VisibleCheck = Value end
+})
+
+CombatTab:AddSection("FOV Settings")
+
+CombatTab:AddToggle("FOVEnabled", {
+    Title = "Enable FOV Circle",
+    Default = false,
+    Callback = function(Value) Settings.FOV.Enabled = Value end
+})
+
+CombatTab:AddSlider("FOVRadius", {
+    Title = "FOV Radius",
+    Default = 100,
+    Min = 10,
+    Max = 400,
+    Rounding = 0,
+    Callback = function(Value) Settings.FOV.Radius = Value end
+})
+
+VisualTab:AddSection("ESP")
+
+local ESPFolder = Instance.new("Folder", CoreGui)
+ESPFolder.Name = "BlueBerry_ESP_Storage"
+
+local function createESP(player)
+    local function applyESP(character)
+        if player == LocalPlayer then return end
+        character:WaitForChild("HumanoidRootPart", 5)
+        character:WaitForChild("Humanoid", 5)
+
+        if ESPFolder:FindFirstChild(player.Name) then ESPFolder[player.Name]:Destroy() end
+
+        local container = Instance.new("Folder", ESPFolder)
+        container.Name = player.Name
+
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "Cham"
+        highlight.Adornee = character
+        highlight.FillColor = Color3.fromRGB(0, 110, 255)
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0.2
+        highlight.Enabled = false
+        highlight.Parent = container
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "Tag"
+        billboard.Adornee = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+        billboard.Size = UDim2.new(0, 200, 0, 50)
+        billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Enabled = false
+        billboard.Parent = container
+
+        local layout = Instance.new("UIListLayout", billboard)
+        layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+        local nameLabel = Instance.new("TextLabel", billboard)
+        nameLabel.Size = UDim2.new(1, 0, 0, 20)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.TextStrokeTransparency = 0
+        nameLabel.Font = Enum.Font.SourceSansBold
+        nameLabel.TextSize = 14
+        nameLabel.Text = player.Name
+        nameLabel.Visible = false
+
+        local healthLabel = Instance.new("TextLabel", billboard)
+        healthLabel.Size = UDim2.new(1, 0, 0, 15)
+        healthLabel.BackgroundTransparency = 1
+        healthLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+        healthLabel.TextStrokeTransparency = 0
+        healthLabel.Font = Enum.Font.SourceSansBold
+        healthLabel.TextSize = 12
+        healthLabel.Visible = false
+
+        local hpConnection
+        local function updateHP(health)
+            healthLabel.Text = "HP: " .. math.floor(health)
+        end
+        if character:FindFirstChild("Humanoid") then
+            hpConnection = character.Humanoid.HealthChanged:Connect(updateHP)
+            updateHP(character.Humanoid.Health)
+        end
+
+        local loop
+        loop = RunService.RenderStepped:Connect(function()
+            if not player.Parent or not character.Parent or not container.Parent then
+                if hpConnection then hpConnection:Disconnect() end
+                loop:Disconnect()
+                container:Destroy()
+                return
+            end
+
+            local teamMatch = true
+            if Settings.ESP.TeamCheck and player.Team == LocalPlayer.Team and LocalPlayer.Team ~= nil then
+                teamMatch = false
+            end
+
+            local overallActive = Settings.ESP.Enabled and teamMatch
+            highlight.Enabled = overallActive and Settings.ESP.Chams
+            billboard.Enabled = overallActive and (Settings.ESP.Names or Settings.ESP.Health)
+            nameLabel.Visible = Settings.ESP.Names
+            healthLabel.Visible = Settings.ESP.Health
+        end)
+    end
+
+    if player.Character then applyESP(player.Character) end
+    player.CharacterAdded:Connect(applyESP)
+end
+
+for _, p in pairs(Players:GetPlayers()) do createESP(p) end
+Players.PlayerAdded:Connect(createESP)
+
+VisualTab:AddToggle("ESPEnabled", { Title = "Enable ESP", Default = false, Callback = function(Value) Settings.ESP.Enabled = Value end })
+VisualTab:AddToggle("Chams", { Title = "Chams", Default = false, Callback = function(Value) Settings.ESP.Chams = Value end })
+VisualTab:AddToggle("Names", { Title = "Name ESP", Default = false, Callback = function(Value) Settings.ESP.Names = Value end })
+VisualTab:AddToggle("Health", { Title = "Health ESP", Default = false, Callback = function(Value) Settings.ESP.Health = Value end })
+VisualTab:AddToggle("ESPTeamCheck", { Title = "Team Check", Default = true, Callback = function(Value) Settings.ESP.TeamCheck = Value end })
+
+TeleportTab:AddSection("Locations")
+
+local Locations = {
+    ["Prison"] = Vector3.new(910,100,2380),
+    ["Yard"] = Vector3.new(820,100,2430),
+    ["Armory"] = Vector3.new(820,100,2450),
+    ["Crim Base"] = Vector3.new(-850,100,2000)
+}
+
+for Name, Position in pairs(Locations) do
+    TeleportTab:AddButton({
+        Title = Name,
+        Callback = function()
+            local Character = LocalPlayer.Character
+            if Character and Character:FindFirstChild("HumanoidRootPart") then
+                Character.HumanoidRootPart.CFrame = CFrame.new(Position)
+            end
+        end
+    })
+end
+
+MiscTab:AddSection("Player")
+
+MiscTab:AddSlider("WalkSpeed", {
+    Title = "Walk Speed",
+    Default = 16,
+    Min = 16,
+    Max = 100,
+    Rounding = 0,
+    Callback = function(Value)
+        local Character = LocalPlayer.Character
+        if Character and Character:FindFirstChild("Humanoid") then
+            Character.Humanoid.WalkSpeed = Value
+        end
+    end
+})
+
+MiscTab:AddToggle("InfiniteJump", {
+    Title = "Infinite Jump",
+    Default = false,
+    Callback = function(Value) Settings.InfiniteJump = Value end
+})
+
+SettingsTab:AddSection("Interface")
+
+SettingsTab:AddButton({
+    Title = "Unload",
+    Callback = function()
+        FOVCircle:Destroy()
+        ESPFolder:Destroy()
+        Fluent:Destroy()
+    end
+})
+
+Fluent:Notify({
+    Title = "BlueBerry Hub",
+    Content = "Loaded Successfully!",
+    Duration = 5
+})
